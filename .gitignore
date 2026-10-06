@@ -1,0 +1,9 @@
+.venv/
+data/
+checkpoints/
+runs/
+__pycache__/
+.ipynb_checkpoints/
+*.pt
+*.bin
+*.safetensors
