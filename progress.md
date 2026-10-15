@@ -35,6 +35,9 @@
 -->
 1단계 결과: GPT-2 토크나이저 사용 (vocab 50257, EOT 50256), tiktoken == HF ID 일치
 배운 점: 30M 설정에서 wte가 파라미터의 64%이지만 조회 연산은 거의 0. 반면 weight tying된 lm_head는 가장 큰 행렬곱
+2단계 결과: 30M 모델(6층, 6헤드, 384차원) 구현, 파라미터 30,044,544로 HF GPT2LMHeadModel과 일치, 초기 loss 10.97 (기대값 10.83)
+배운 점: nn.Linear는 (출력, 입력), HF Conv1D는 (입력, 출력) → 4단계에서 c_attn, c_proj, c_fc, mlp.c_proj만 전치
+막혔던 점: 노트북 셀 반복 실행으로 view 에러 → 재시작. 슬라이스한 targets에 view 사용 불가 → reshape
 
 ### 0. 환경 세팅 (진행 중) - 2026-10-04 ~ 2026-10-06
 - 설정: venv 격리, torch 2.14.1+cu130, numpy 설치
