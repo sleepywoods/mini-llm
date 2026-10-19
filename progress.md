@@ -38,6 +38,10 @@
 2단계 결과: 30M 모델(6층, 6헤드, 384차원) 구현, 파라미터 30,044,544로 HF GPT2LMHeadModel과 일치, 초기 loss 10.97 (기대값 10.83)
 배운 점: nn.Linear는 (출력, 입력), HF Conv1D는 (입력, 출력) → 4단계에서 c_attn, c_proj, c_fc, mlp.c_proj만 전치
 막혔던 점: 노트북 셀 반복 실행으로 view 에러 → 재시작. 슬라이스한 targets에 view 사용 불가 → reshape
+3단계 결과: 30M, 9,000스텝(2.95억 토큰), 약 1시간 20분 / train 1.545, val 1.547 / temp 0.8 + top-k 50에서 문법적인 이야기 생성
+학습 설정: micro batch 16 × K 8, bf16, lr 6e-4 → 6e-5 (warmup 200, cosine), clip 1.0, wd 0.1 (2D만)
+배운 점: bf16은 학습 전체로는 1.4배 (행렬곱만 4.5배). Windows sysmem fallback으로 VRAM 초과 시 OOM 대신 급격히 느려짐. top-k 없이 높은 temperature를 쓰면 학습 안 된 토큰이 섞여 무너짐
+막혔던 점: 노트북 view 에러 → 커널 재시작. Windows os.replace PermissionError → 재시도 추가. exFAT 오류 → chkdsk
 
 ### 0. 환경 세팅 (진행 중) - 2026-10-04 ~ 2026-10-06
 - 설정: venv 격리, torch 2.14.1+cu130, numpy 설치
@@ -56,6 +60,8 @@
 - 남은 작업: 0-5 패키지 설치 + requirements.txt, 0-6 폴더 구조 + git
 
 ## 질문 메모
+- 3단계 측정: bf16 B=16 → 56.5k tok/s, 4.58GB. fp32(TF32) 대비 1.39배 (행렬곱 벤치마크 4.5배와 차이 = 메모리 한계 연산)
+Windows sysmem fallback: VRAM 초과 시 OOM 대신 성능 급락 (B=48: 17배 느려짐) → 예측기/실측 시 주의
 - 4단계: 최신 transformers로 저장한 모델이 transformers 4.45.1 + CPU torch(졸업 프로젝트 환경)에서 로드·fx 추적되는지 검증
 - 4단계: fp32 vs fp16 logits 비교 (NaN/inf, 최대 오차, greedy 생성 일치) — bf16 학습 모델의 fp16 오버플로 확인
 - 7단계: 모델 시리즈 크기 결정
