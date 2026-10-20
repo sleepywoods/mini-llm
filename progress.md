@@ -42,6 +42,10 @@
 학습 설정: micro batch 16 × K 8, bf16, lr 6e-4 → 6e-5 (warmup 200, cosine), clip 1.0, wd 0.1 (2D만)
 배운 점: bf16은 학습 전체로는 1.4배 (행렬곱만 4.5배). Windows sysmem fallback으로 VRAM 초과 시 OOM 대신 급격히 느려짐. top-k 없이 높은 temperature를 쓰면 학습 안 된 토큰이 섞여 무너짐
 막혔던 점: 노트북 view 에러 → 커널 재시작. Windows os.replace PermissionError → 재시도 추가. exFAT 오류 → chkdsk
+4단계 결과: skmbkang/tinystories-gpt2-30m 업로드 (MIT, 데이터 CDLA-Sharing-1.0 명시). 변환 시 c_attn·attn.c_proj·c_fc·mlp.c_proj만 전치. fp32 logits 최대 차이 2.7e-05, fp16 활성값 최대 20.2 (한계 65,504), greedy 일치
+졸업 프로젝트 환경(4.45.1 + CPU torch): 로드·생성·fx(511노드)·export 실제/Fake prefill(255노드)·Fake decode(256노드) 모두 성공. KV 캐시는 tuple 형식
+예측기 메모: dropout·view류는 비용 0 처리, decode의 cat 12개(KV 캐시 갱신), gelu_new는 작은 원소별 연산 여러 개로 분해, lm_head는 노드 1개지만 최대 행렬곱, prefill은 연산 한계·decode는 메모리 한계 경향
+큰 모델(125M/350M) 만들 때: fp16 활성값 검증 다시 실행
 
 ### 0. 환경 세팅 (진행 중) - 2026-10-04 ~ 2026-10-06
 - 설정: venv 격리, torch 2.14.1+cu130, numpy 설치
@@ -63,7 +67,7 @@
 - 3단계 측정: bf16 B=16 → 56.5k tok/s, 4.58GB. fp32(TF32) 대비 1.39배 (행렬곱 벤치마크 4.5배와 차이 = 메모리 한계 연산)
 Windows sysmem fallback: VRAM 초과 시 OOM 대신 성능 급락 (B=48: 17배 느려짐) → 예측기/실측 시 주의
 - 4단계: 최신 transformers로 저장한 모델이 transformers 4.45.1 + CPU torch(졸업 프로젝트 환경)에서 로드·fx 추적되는지 검증
-- 4단계: fp32 vs fp16 logits 비교 (NaN/inf, 최대 오차, greedy 생성 일치) — bf16 학습 모델의 fp16 오버플로 확인
+- 4단계: fp32 vs fp16 logits 비교 (NaN/inf, 최대 오차, greedy 생성 일치) — bf16 학습 모델의 fp16 오버플로 확인, 30M: 통과 (활성값 최대 20, greedy 일치)
 - 7단계: 모델 시리즈 크기 결정
   - 10M/30M은 오버헤드 지배 영역, 125M/350M은 연산·메모리 한계 영역 → 둘 다 포함해야 예측기 전체 검증 가능
   - 350M은 학습 부담 시 랜덤 가중치로 시간 측정만 하는 방안 검토
