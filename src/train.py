@@ -18,7 +18,8 @@ import numpy as np
 import torch
 from torch.utils.tensorboard import SummaryWriter
 
-from dataset import get_batch
+import dataset
+import sft_dataset
 from model import GPT, GPTConfig
 
 
@@ -34,8 +35,12 @@ def parse_args():
     p.add_argument("--grad_accum", type=int, default=8)   # K
     p.add_argument("--max_lr", type=float, default=6e-4)
     p.add_argument("--seed", type=int, default=42)
+    p.add_argument("--data", choices=["pretrain", "sft"], default="pretrain")
+    p.add_argument("--init_from", default=None)   # 이 run의 best.pt 가중치로 시작 (SFT용)
     return p.parse_args()
 
+def batch_fn(args):
+    return sft_dataset.get_batch if args.data == "sft" else dataset.get_batch
 
 def get_lr(step, args):
     min_lr = args.max_lr / 10
@@ -55,7 +60,7 @@ def estimate_loss(model, args, block_size, device):
     for split in ("train", "val"):
         losses = torch.zeros(args.eval_iters)
         for i in range(args.eval_iters):
-            x, y = get_batch(split, args.micro_batch, block_size, device)
+            x, y = batch_fn(args)(split, args.micro_batch, block_size, device)
             with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
                 _, loss = model(x, y)
             losses[i] = loss.item()
@@ -104,6 +109,11 @@ def main():
     # ---- 모델, 옵티마이저 ----
     cfg = GPTConfig()
     model = GPT(cfg).to(device)
+    if args.init_from and not args.resume:
+        init = torch.load(os.path.join(CKPT_DIR, args.init_from, "best.pt"),
+                          map_location="cpu", weights_only=False)
+        model.load_state_dict(init["model"])       # 가중치만 가져옴 (옵티마이저 상태는 새로)
+        print(f"초기 가중치: {args.init_from} (step {init['step']}, val {init['best_val']:.4f})")
     decay = [p for p in model.parameters() if p.dim() >= 2]
     no_decay = [p for p in model.parameters() if p.dim() < 2]
     optimizer = torch.optim.AdamW(
@@ -137,6 +147,10 @@ def main():
     print(f"업데이트당 토큰 {tokens_per_step:,} / 총 {args.max_steps:,}스텝 "
           f"≈ {tokens_per_step * args.max_steps / 1e6:.0f}M 토큰")
 
+    if args.init_from and start_step == 0:
+        base = estimate_loss(model, args, cfg.block_size, device)
+        print(f"[학습 전] train {base['train']:.4f} | val {base['val']:.4f}")
+
     last_done = start_step - 1                 # 마지막으로 완료한 스텝
     try:
         for step in range(start_step, args.max_steps):
@@ -151,7 +165,7 @@ def main():
             optimizer.zero_grad(set_to_none=True)
             loss_accum = 0.0
             for _ in range(args.grad_accum):
-                x, y = get_batch("train", args.micro_batch, cfg.block_size, device)   # (B, T)
+                x, y = batch_fn(args)("train", args.micro_batch, cfg.block_size, device)   # (B, T)
                 with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
                     _, loss = model(x, y)
                 loss = loss / args.grad_accum

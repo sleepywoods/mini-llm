@@ -46,6 +46,11 @@
 졸업 프로젝트 환경(4.45.1 + CPU torch): 로드·생성·fx(511노드)·export 실제/Fake prefill(255노드)·Fake decode(256노드) 모두 성공. KV 캐시는 tuple 형식
 예측기 메모: dropout·view류는 비용 0 처리, decode의 cat 12개(KV 캐시 갱신), gelu_new는 작은 원소별 연산 여러 개로 분해, lm_head는 노드 1개지만 최대 행렬곱, prefill은 연산 한계·decode는 메모리 한계 경향
 큰 모델(125M/350M) 만들 때: fp16 활성값 검증 다시 실행
+5단계 결과: skmbkang/tinystories-gpt2-30m-sft 업로드. lr 1e-4 → 1e-5, warmup 100, 2,000스텝(약 26만 예시), 약 20분. SFT val loss 1.548 → 1.260
+평가 (valid 100개, Words만): 단어 포함률 21.0% → 65.3%, 3개 모두 1.0% → 26.0%, EOT 종료 89% → 100%
+잊어버림: 사전학습 val 데이터 loss 1.586 → 1.949 (8단계 LoRA와 비교할 기준)
+배운 점: SFT = 같은 다음 토큰 학습 + (조건, 답) 데이터 + 답변만 loss(-100) + 작은 lr. 데이터 쌍의 형태가 배우는 능력을 정함. 256 넘는 예시는 자르지 말고 버림(조건이 잘리면 안 됨). 형식 패턴이 내용보다 먼저 학습됨
+막혔던 점: Windows 기본 인코딩 cp949로 데이터셋 읽기 실패 → hf_hub_download 후 encoding="utf-8"로 직접 읽기
 
 ### 0. 환경 세팅 (진행 중) - 2026-10-04 ~ 2026-10-06
 - 설정: venv 격리, torch 2.14.1+cu130, numpy 설치
